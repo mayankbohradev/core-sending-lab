@@ -14,18 +14,25 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "db:migrate": "tsx src/scripts/migrate.ts",
+    "worker": "tsx src/worker-main.ts",
+    "worker:once": "tsx src/worker-once.ts",
+    "demo:flow": "tsx src/scripts/demo-flow.ts",
     "compose:up": "docker compose up -d",
     "compose:down": "docker compose down"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.8",
+    "dotenv": "^17.4.2",
     "hono": "^4.12.28",
     "ioredis": "^5.11.1",
+    "nodemailer": "^9.0.3",
     "pg": "^8.22.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^26.1.0",
+    "@types/nodemailer": "^8.0.1",
     "@types/pg": "^8.20.0",
     "tsx": "^4.23.0",
     "typescript": "^6.0.3",

@@ -19,16 +19,21 @@ const testConfig: AppConfig = {
   domainThrottleMs: 500,
 }
 
-describe('health route', () => {
-  it('returns service health', async () => {
+describe('message API validation', () => {
+  it('rejects message submissions without a body', async () => {
     const app = createApp(testConfig)
-    const response = await app.request('/health')
+    const response = await app.request('/v1/messages', {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: {
+        'content-type': 'application/json',
+      },
+    })
 
-    expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual({
-      status: 'ok',
-      service: 'core-sending-lab',
-      environment: 'test',
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'validation_error',
     })
   })
 })
+
