@@ -1,50 +1,161 @@
 # Core Sending Lab
 
-Core Sending Lab is a local email delivery simulator for exploring backend reliability patterns: queues, workers, retries, backoff, throttling, delivery events, local SMTP delivery, and operational debugging.
+Core Sending Lab is a local email delivery simulator for learning and testing the reliability patterns behind transactional email systems.
 
-## Scope
+It accepts an email-like message, stores it durably, queues a delivery job, processes it with a worker, sends it only to a local SMTP sink, records a timeline of delivery events, and exposes small operator-friendly debugging endpoints.
 
-Build a local email transport simulator that accepts message submissions, stores them durably, queues delivery jobs, sends only to a local SMTP sink, records delivery events, and exposes debugging tools for operators.
+This is a first working version. The goal of v0 is not polish. The goal is to make the full message lifecycle visible and testable on a laptop.
 
-## Non-Goals
+## Why This Exists
 
-- Do not send real email to the internet.
-- Do not optimize for a polished UI before the delivery pipeline works.
-- Do not publish scale claims before measuring them locally.
+Most email examples stop at "call sendMail" or "drop a message in Mailpit." Real delivery systems have more moving parts:
 
-## Planned Stack
+- accepting requests safely
+- protecting retries with idempotency
+- queueing work outside the request path
+- leasing jobs so workers do not double-process the same message
+- deciding whether failures should retry or stop
+- moving exhausted jobs to a dead-letter queue
+- keeping an event timeline that explains what happened
 
-- TypeScript backend API with Hono
-- Postgres for messages, jobs, events, and idempotency records
-- Redis or a local queue abstraction for worker coordination
-- Worker process for delivery, retries, and DLQ handling
-- Mailpit or MailHog as the local SMTP sink
-- Vitest for unit/integration tests
-- Docker Compose for local development
-- Prometheus/OpenTelemetry-style metrics where practical
+This project started as a small local lab for that middle layer: the part between "the API accepted a message" and "an operator can explain what happened to it."
 
-## Key Docs
+## How It Is Useful
 
-- [Architecture notes](./docs/ARCHITECTURE.md)
+Core Sending Lab is useful when you want to inspect the moving parts of delivery reliability without sending real email.
+
+Compared with Mailpit or MailHog:
+
+- Mailpit is excellent for catching local emails.
+- Core Sending Lab uses Mailpit as the sink, but adds API acceptance, persistence, job leasing, retries, DLQ, and event timelines.
+
+Compared with a generic queue like BullMQ:
+
+- BullMQ is great for background jobs.
+- Core Sending Lab focuses on the email-delivery lifecycle around the queue: message state, SMTP attempts, retry classification, and operator debugging.
+
+Compared with running a real mail transfer agent:
+
+- Real mail systems are powerful, but they are too operationally heavy for safe local experimentation.
+- Core Sending Lab stays local by default, so the behavior is easy to reset, inspect, and test.
+
+## Current v0 Capabilities
+
+- `POST /v1/messages` accepts a local message submission.
+- `Idempotency-Key` protects repeated submissions.
+- Postgres stores messages, jobs, idempotency records, and delivery events.
+- A worker leases queued jobs with `FOR UPDATE SKIP LOCKED`.
+- Delivery goes to local Mailpit over SMTP.
+- Transient failures retry with exponential backoff and jitter.
+- Permanent or exhausted failures move to a dead-letter queue.
+- Domain-level throttling spaces out attempts to the same recipient domain.
+- Debug endpoints show messages, jobs, DLQ entries, events, and simple metrics.
+
+## Architecture
+
+The architecture separates request handling from delivery work.
+
+```text
+HTTP API -> Postgres -> worker lease -> local SMTP -> Mailpit
+            |            |
+            |            +-> retry / DLQ decisions
+            |
+            +-> append-only delivery events
+```
+
+The API is the control plane. It validates requests, persists messages, creates jobs, and serves debugging views.
+
+The worker is the data plane. It leases jobs, performs SMTP delivery, classifies failures, schedules retries, and writes delivery events.
+
+More detail: [Architecture notes](./docs/ARCHITECTURE.md)
 
 ## Local Setup
 
 ```bash
 npm install
 npm run compose:up
+npm run db:migrate
 npm run dev
 ```
 
-Health check:
+In another terminal, start the worker:
 
 ```bash
-curl http://localhost:8787/health
+npm run worker
 ```
 
 Mailpit UI:
 
 ```text
 http://localhost:8025
+```
+
+## Quick Smoke Demo
+
+This command migrates the database, submits one demo message, runs the worker path, and prints the final message timeline:
+
+```bash
+npm run compose:up
+npm run demo:flow
+```
+
+After it runs, open Mailpit:
+
+```text
+http://localhost:8025
+```
+
+## API Usage
+
+Submit a message:
+
+```bash
+curl -X POST http://localhost:8787/v1/messages \
+  -H 'content-type: application/json' \
+  -H 'idempotency-key: demo-message-1' \
+  -d '{
+    "from": "sender@example.test",
+    "to": "receiver@example.test",
+    "subject": "Local delivery test",
+    "text": "Hello from Core Sending Lab"
+  }'
+```
+
+Run one worker tick manually:
+
+```bash
+npm run worker:once
+```
+
+Inspect recent messages:
+
+```bash
+curl http://localhost:8787/v1/messages
+```
+
+Inspect delivery events for one message:
+
+```bash
+curl http://localhost:8787/v1/messages/<message_id>/events
+```
+
+Inspect queued, retrying, delivered, or dead-lettered jobs:
+
+```bash
+curl 'http://localhost:8787/v1/jobs?status=delivered'
+curl http://localhost:8787/v1/dlq
+```
+
+Retry a dead-lettered job:
+
+```bash
+curl -X POST http://localhost:8787/v1/jobs/<job_id>/retry
+```
+
+Simple metrics:
+
+```bash
+curl http://localhost:8787/metrics
 ```
 
 ## Verification
@@ -55,15 +166,47 @@ npm test
 npm run build
 ```
 
-## Planned Capabilities
+## Configuration
 
-The project should demonstrate a complete local message lifecycle:
+Copy `.env.example` to `.env` if you want to override defaults.
 
-1. API accepts a message.
-2. Message is persisted with idempotency protection.
-3. Worker leases and processes a delivery job.
-4. SMTP delivery goes to local Mailpit/MailHog only.
-5. Transient failures retry with backoff and jitter.
-6. Exhausted jobs move to a dead-letter queue.
-7. Debug endpoint shows timeline, attempts, and final status.
-8. Documentation includes run commands, architecture notes, and test results.
+Important knobs:
+
+- `DATABASE_URL` - Postgres connection string.
+- `SMTP_HOST` and `SMTP_PORT` - local SMTP sink.
+- `MAX_DELIVERY_ATTEMPTS` - maximum attempts before DLQ.
+- `RETRY_BASE_MS` and `RETRY_MAX_MS` - retry backoff bounds.
+- `DOMAIN_THROTTLE_MS` - minimum spacing between attempts to the same domain.
+
+## Design Notes
+
+The first version uses Postgres as both the durable store and the job lease coordinator. That keeps the system easy to understand: every important state change is visible in one database.
+
+The project keeps delivery events append-only. Message and job rows show the current state, but events explain how the system got there.
+
+Mailpit is deliberately the only default SMTP target. This makes the project safe for repeatable local testing and prevents accidental internet delivery.
+
+Redis is included in Docker Compose for later queue experiments, but v0 starts with a Postgres-backed queue because it is simpler to inspect and reason about.
+
+## TODO
+
+- [x] Scaffold TypeScript API and local Docker services.
+- [x] Add Postgres schema for messages, jobs, idempotency, and events.
+- [x] Add message submission API with idempotency support.
+- [x] Add worker leasing, SMTP delivery, retry scheduling, and DLQ handling.
+- [x] Add local smoke demo and focused unit tests.
+- [ ] Add integration tests against Docker Compose services.
+- [ ] Add Redis-backed queue adapter for comparison with Postgres leasing.
+- [ ] Add an operator dashboard for message timelines and DLQ actions.
+- [ ] Add provider simulator modes for throttling, 4xx, and 5xx SMTP responses.
+- [ ] Add load test scripts and publish measured local results.
+- [ ] Add OpenTelemetry traces for API, queue, worker, and SMTP spans.
+- [ ] Add GitHub Actions for typecheck, tests, and build.
+- [ ] Add a versioned example dataset for repeatable demos.
+
+## Non-Goals
+
+- This project does not send real email to the internet.
+- This project is not a production email service.
+- This project does not claim delivery performance until benchmarks exist.
+- This project favors inspectability over throughput in v0.
