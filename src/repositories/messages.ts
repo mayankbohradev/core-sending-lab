@@ -142,6 +142,20 @@ export class MessagesRepository {
     return result.rows.map(mapMessage)
   }
 
+  async listRecentMessages(limit: number): Promise<StoredMessage[]> {
+    const result = await this.pool.query<MessageRow>(
+      `
+        SELECT *
+        FROM messages
+        ORDER BY created_at DESC
+        LIMIT $1
+      `,
+      [limit]
+    )
+
+    return result.rows.map(mapMessage)
+  }
+
   async getMessage(tenantId: string, messageId: string): Promise<StoredMessage | null> {
     const result = await this.pool.query<MessageRow>(
       `
@@ -150,6 +164,19 @@ export class MessagesRepository {
         WHERE tenant_id = $1 AND id = $2
       `,
       [tenantId, messageId]
+    )
+
+    return result.rowCount === 0 ? null : mapMessage(result.rows[0])
+  }
+
+  async getMessageById(messageId: string): Promise<StoredMessage | null> {
+    const result = await this.pool.query<MessageRow>(
+      `
+        SELECT *
+        FROM messages
+        WHERE id = $1
+      `,
+      [messageId]
     )
 
     return result.rowCount === 0 ? null : mapMessage(result.rows[0])
@@ -169,5 +196,18 @@ export class MessagesRepository {
 
     return result.rows.map(mapEvent)
   }
-}
 
+  async listEventsByMessageId(messageId: string): Promise<DeliveryEvent[]> {
+    const result = await this.pool.query<DeliveryEventRow>(
+      `
+        SELECT *
+        FROM delivery_events
+        WHERE message_id = $1
+        ORDER BY created_at ASC
+      `,
+      [messageId]
+    )
+
+    return result.rows.map(mapEvent)
+  }
+}

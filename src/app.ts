@@ -13,6 +13,7 @@ import {
 import { createPool } from './db/pool.js'
 import { JobsRepository } from './repositories/jobs.js'
 import { MessagesRepository } from './repositories/messages.js'
+import { renderDashboard, renderMessageTimeline, renderSetupProblem } from './views/dashboard.js'
 
 export type AppDependencies = {
   pool?: Pool
@@ -52,6 +53,38 @@ export function createApp(config: AppConfig = getConfig(), dependencies: AppDepe
     jobsRepository ??= new JobsRepository(getPool())
     return jobsRepository
   }
+
+  app.get('/', async (c) => {
+    try {
+      const [messages, jobs] = await Promise.all([
+        getMessagesRepository().listRecentMessages(20),
+        getJobsRepository().listRecentJobs(20),
+      ])
+
+      return c.html(renderDashboard({ messages, jobs }))
+    } catch (error) {
+      return c.html(renderSetupProblem(error), 503)
+    }
+  })
+
+  app.get('/messages/:id/timeline', async (c) => {
+    try {
+      const message = await getMessagesRepository().getMessageById(c.req.param('id'))
+
+      if (message === null) {
+        throw new NotFoundError('Message was not found')
+      }
+
+      const events = await getMessagesRepository().listEventsByMessageId(message.id)
+      return c.html(renderMessageTimeline({ message, events }))
+    } catch (error) {
+      if (error instanceof NotFoundError) {
+        throw error
+      }
+
+      return c.html(renderSetupProblem(error), 503)
+    }
+  })
 
   app.get('/health', (c) => {
     return c.json({

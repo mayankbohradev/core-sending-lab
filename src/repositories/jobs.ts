@@ -436,6 +436,20 @@ export class JobsRepository {
     return result.rows.map(mapJob)
   }
 
+  async listRecentJobs(limit: number): Promise<DeliveryJob[]> {
+    const result = await this.pool.query<DeliveryJobRow>(
+      `
+        SELECT *
+        FROM delivery_jobs
+        ORDER BY created_at DESC
+        LIMIT $1
+      `,
+      [limit]
+    )
+
+    return result.rows.map(mapJob)
+  }
+
   async listDeadLetters(tenantId: string, limit: number): Promise<DeliveryJob[]> {
     return this.listJobs(tenantId, 'dead_lettered', limit)
   }
@@ -487,4 +501,3 @@ export class JobsRepository {
     return `${lines.join('\n')}\n`
   }
 }
-

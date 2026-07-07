@@ -51,6 +51,28 @@ Compared with running a real mail transfer agent:
 - Domain-level throttling spaces out attempts to the same recipient domain.
 - Debug endpoints show messages, jobs, DLQ entries, events, and simple metrics.
 
+## Visual Dashboard
+
+Start the API server and open the dashboard:
+
+```bash
+npm run dev
+```
+
+```text
+http://localhost:8787
+```
+
+The dashboard is the easiest way to understand the project. It shows recent messages, delivery jobs, and clickable event timelines.
+
+Mailpit is still available at:
+
+```text
+http://localhost:8025
+```
+
+Use the dashboard to inspect the delivery system. Use Mailpit to inspect the final local email.
+
 ## Architecture
 
 The architecture separates request handling from delivery work.
@@ -68,6 +90,8 @@ The API is the control plane. It validates requests, persists messages, creates 
 The worker is the data plane. It leases jobs, performs SMTP delivery, classifies failures, schedules retries, and writes delivery events.
 
 More detail: [Architecture notes](./docs/ARCHITECTURE.md)
+
+Beginner walkthrough: [Core Sending Lab Walkthrough](./docs/WALKTHROUGH.md)
 
 ## Local Setup
 
@@ -197,7 +221,8 @@ Redis is included in Docker Compose for later queue experiments, but v0 starts w
 - [x] Add local smoke demo and focused unit tests.
 - [ ] Add integration tests against Docker Compose services.
 - [ ] Add Redis-backed queue adapter for comparison with Postgres leasing.
-- [ ] Add an operator dashboard for message timelines and DLQ actions.
+- [x] Add an operator dashboard for message timelines and delivery jobs.
+- [ ] Add dashboard actions for DLQ retry and demo message submission.
 - [ ] Add provider simulator modes for throttling, 4xx, and 5xx SMTP responses.
 - [ ] Add load test scripts and publish measured local results.
 - [ ] Add OpenTelemetry traces for API, queue, worker, and SMTP spans.
