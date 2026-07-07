@@ -172,7 +172,7 @@ Copy `.env.example` to `.env` if you want to override defaults.
 
 Important knobs:
 
-- `DATABASE_URL` - Postgres connection string.
+- `DATABASE_URL` - Postgres connection string. Docker Compose maps Postgres to host port `55432` to avoid common local Postgres conflicts.
 - `SMTP_HOST` and `SMTP_PORT` - local SMTP sink.
 - `MAX_DELIVERY_ATTEMPTS` - maximum attempts before DLQ.
 - `RETRY_BASE_MS` and `RETRY_MAX_MS` - retry backoff bounds.

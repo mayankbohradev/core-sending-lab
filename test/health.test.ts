@@ -6,7 +6,7 @@ import type { AppConfig } from '../src/config.js'
 const testConfig: AppConfig = {
   nodeEnv: 'test',
   port: 8787,
-  databaseUrl: 'postgres://core_sending_lab:core_sending_lab@localhost:5432/core_sending_lab',
+  databaseUrl: 'postgres://core_sending_lab:core_sending_lab@localhost:55432/core_sending_lab',
   redisUrl: 'redis://localhost:6379',
   smtpHost: 'localhost',
   smtpPort: 1025,
