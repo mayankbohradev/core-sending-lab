@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+coverage/
+.turbo/
+.next/
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Runtime data
+tmp/
+data/
+postgres-data/
+redis-data/
+mailpit-data/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+
